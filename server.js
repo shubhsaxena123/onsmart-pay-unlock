@@ -83,6 +83,7 @@ app.post('/api/session', async (req, res) => {
   if (!lock) return res.status(404).json({ error: 'No lock with that code.' });
   if (!isOnline(lock)) return res.status(409).json({ error: 'This lock is offline right now. Try again in a minute.' });
   if (lock.pendingUnlock) return res.status(409).json({ error: 'This lock is already being unlocked.' });
+  if (lock.locked === false) return res.status(409).json({ error: 'This clamp is already unlocked. No payment needed.' });
 
   // cancel any older pending session for this lock
   for (const s of Object.values(sessions)) if (s.lockId === lockId && s.status === 'pending') s.status = 'cancelled';
@@ -112,6 +113,8 @@ app.get('/api/lock/:id/poll', (req, res) => {
   const lock = locks[req.params.id];
   if (!lock || req.get('X-Lock-Key') !== lock.secret) return res.status(403).type('text').send('DENIED');
   lock.lastSeen = Date.now();
+  if (req.query.state === 'locked') lock.locked = true;
+  else if (req.query.state === 'unlocked') lock.locked = false;
   res.type('text').send(lock.pendingUnlock ? 'UNLOCK' : 'NONE');
 });
 
@@ -156,7 +159,7 @@ app.get('/api/admin/state', (req, res) => {
   if (req.query.key !== ADMIN_KEY) return res.status(403).json({ error: 'bad key' });
   expireOld();
   res.json({
-    locks: Object.values(locks).map(l => ({ id: l.id, online: isOnline(l), lastSeenSecAgo: l.lastSeen ? Math.round((Date.now() - l.lastSeen) / 1000) : null, pendingUnlock: !!l.pendingUnlock })),
+    locks: Object.values(locks).map(l => ({ id: l.id, online: isOnline(l), locked: l.locked ?? null, lastSeenSecAgo: l.lastSeen ? Math.round((Date.now() - l.lastSeen) / 1000) : null, pendingUnlock: !!l.pendingUnlock })),
     sessions: Object.values(sessions).sort((a, b) => b.createdAt - a.createdAt).slice(0, 30),
   });
 });

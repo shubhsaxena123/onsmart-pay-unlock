@@ -26,7 +26,7 @@ async function load() {
   if (!r.ok) { alert('Wrong admin key'); return; }
   const d = await r.json();
   document.getElementById('locks').innerHTML = '<tr><th>Lock</th><th>Status</th><th>Last seen</th><th></th></tr>' +
-    d.locks.map(l => `<tr><td>${l.id}</td><td class="${l.online ? 'on' : 'off'}">${l.online ? 'Online' : 'Offline'}</td>
+    d.locks.map(l => `<tr><td>${l.id}</td><td class="${l.online ? 'on' : 'off'}">${l.online ? 'Online' : 'Offline'}${l.locked === true ? ' · locked' : l.locked === false ? ' · unlocked' : ''}</td>
       <td>${l.lastSeenSecAgo == null ? 'never' : l.lastSeenSecAgo + ' s ago'}</td>
       <td><button onclick="act('unlock',{lockId:'${l.id}'})">Force unlock</button></td></tr>`).join('');
   document.getElementById('sessions').innerHTML = '<tr><th>Time</th><th>Lock</th><th>Amount</th><th>Status</th><th></th></tr>' +
