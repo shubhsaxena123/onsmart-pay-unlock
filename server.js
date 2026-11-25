@@ -18,6 +18,10 @@ const ADMIN_KEY = process.env.ADMIN_KEY || 'change-me-admin';
 // LOCKS format: "code:price,code:price" with each lock's secret in env var LOCK_SECRET_<code>
 // (the older "code:secret:price" format also works)
 const LOCKS_ENV = process.env.LOCKS || '5424:50';
+// Prototype mode: the "I've paid" button unlocks after a short delay WITHOUT checking the payment.
+// Set TRUST_PAID_BUTTON=false on Render to require SMS/notification confirmation instead.
+const TRUST_PAID_BUTTON = (process.env.TRUST_PAID_BUTTON || 'true') === 'true';
+const PAID_BUTTON_DELAY_MS = 5000;
 const ONLINE_WINDOW_MS = 15 * 1000;   // lock counts as online if it polled in the last 15 s
 const SESSION_TTL_MS = 10 * 60 * 1000; // a payment session is valid for 10 minutes
 // -------------------------------------------------------------------------------
@@ -44,7 +48,7 @@ function expireOld() {
 
 // Pick a unique amount like 50.13 that no other pending session is using
 function uniqueAmount(base) {
-  const used = new Set(Object.values(sessions).filter(s => s.status === 'pending').map(s => s.amount));
+  const used = new Set(Object.values(sessions).filter(s => s.status === 'pending' || s.status === 'confirming').map(s => s.amount));
   const options = [];
   for (let p = 1; p <= 99; p++) {
     const amt = (Math.floor(base) + p / 100).toFixed(2);
@@ -105,6 +109,19 @@ app.get('/api/session/:id', (req, res) => {
   const s = sessions[req.params.id];
   if (!s) return res.status(404).json({ error: 'Session not found' });
   res.json({ status: s.status, amount: s.amount, lockId: s.lockId });
+});
+
+// "I've paid" button (prototype: trusted, unlocks after 5 s)
+app.post('/api/session/:id/paid', (req, res) => {
+  expireOld();
+  const s = sessions[req.params.id];
+  if (!s) return res.status(404).json({ error: 'Session not found' });
+  if (!TRUST_PAID_BUTTON) return res.status(403).json({ error: 'Waiting for payment confirmation from the bank.' });
+  if (s.status !== 'pending') return res.json({ ok: true, status: s.status });
+  s.status = 'confirming';
+  console.log(`BTN   lock=${s.lockId} amount=${s.amount} - unlocking in ${PAID_BUTTON_DELAY_MS / 1000}s`);
+  setTimeout(() => { if (s.status === 'confirming') markPaid(s, 'paid-button'); }, PAID_BUTTON_DELAY_MS);
+  res.json({ ok: true, delaySec: PAID_BUTTON_DELAY_MS / 1000 });
 });
 
 // ---------- ESP32 API (plain text, easy to parse on the ESP32) ----------

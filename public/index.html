@@ -46,6 +46,7 @@
     <a id="payBtn" class="btn" href="#">Pay with UPI app</a>
     <img id="qr" alt="UPI QR code">
     <p class="sub" style="margin:6px 0 0">Or scan this QR from another phone</p>
+    <button id="paidBtn" style="background:#16a34a">I've paid</button>
     <div class="status" id="status"><span class="spin"></span>Waiting for payment…</div>
     <button class="link" id="cancel">Use a different lock</button>
   </div>
@@ -61,6 +62,7 @@
 <script>
 const $ = id => document.getElementById(id);
 let timer = null;
+let currentSession = null;
 
 function show(step) { ['step1','step2','step3'].forEach(s => $(s).classList.toggle('hidden', s !== step)); }
 
@@ -81,6 +83,9 @@ $('go').onclick = async () => {
     $('amt').textContent = d.amount;
     $('payBtn').href = d.upiLink;
     $('qr').src = d.qr;
+    currentSession = d.sessionId;
+    $('paidBtn').disabled = false; $('paidBtn').textContent = "I've paid";
+    $('status').innerHTML = '<span class="spin"></span>Waiting for payment…';
     show('step2');
     poll(d.sessionId);
   } catch (e) {
@@ -96,6 +101,7 @@ function poll(id) {
   timer = setInterval(async () => {
     try {
       const d = await (await fetch('/api/session/' + id)).json();
+      if (d.status === 'confirming') return; // countdown is showing
       if (d.status === 'paid') $('status').innerHTML = '<span class="spin"></span>Payment received! Unlocking…';
       else if (d.status === 'unlocked') { clearInterval(timer); show('step3'); }
       else if (d.status === 'expired' || d.status === 'cancelled') {
@@ -105,6 +111,25 @@ function poll(id) {
     } catch (e) { /* network blip, keep trying */ }
   }, 2000);
 }
+
+$('paidBtn').onclick = async () => {
+  $('paidBtn').disabled = true;
+  try {
+    const r = await fetch('/api/session/' + currentSession + '/paid', { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Something went wrong');
+    let left = d.delaySec || 5;
+    $('paidBtn').textContent = 'Payment noted';
+    const tick = () => {
+      if (left > 0) { $('status').innerHTML = '<span class="spin"></span>Confirming payment… ' + left; left--; setTimeout(tick, 1000); }
+      else $('status').innerHTML = '<span class="spin"></span>Payment confirmed! Unlocking…';
+    };
+    tick();
+  } catch (e) {
+    $('status').textContent = e.message;
+    $('paidBtn').disabled = false;
+  }
+};
 
 $('cancel').onclick = () => { clearInterval(timer); show('step1'); };
 </script>
