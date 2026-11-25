@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OnSmart Admin</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 20px; color: #1d2330; }
+  table { border-collapse: collapse; width: 100%; margin-bottom: 24px; font-size: 14px; }
+  th, td { border-bottom: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; }
+  .on { color: #16a34a; font-weight: 600; } .off { color: #b91c1c; }
+  button { padding: 4px 10px; cursor: pointer; }
+</style>
+</head>
+<body>
+<h2>OnSmart Admin</h2>
+<p>Admin key: <input id="key" type="password"> <button onclick="load()">Load</button></p>
+<h3>Locks</h3><table id="locks"></table>
+<h3>Recent payments</h3><table id="sessions"></table>
+<script>
+const key = () => document.getElementById('key').value;
+const k = new URLSearchParams(location.search).get('key'); if (k) document.getElementById('key').value = k;
+
+async function load() {
+  const r = await fetch('/api/admin/state?key=' + encodeURIComponent(key()));
+  if (!r.ok) { alert('Wrong admin key'); return; }
+  const d = await r.json();
+  document.getElementById('locks').innerHTML = '<tr><th>Lock</th><th>Status</th><th>Last seen</th><th></th></tr>' +
+    d.locks.map(l => `<tr><td>${l.id}</td><td class="${l.online ? 'on' : 'off'}">${l.online ? 'Online' : 'Offline'}</td>
+      <td>${l.lastSeenSecAgo == null ? 'never' : l.lastSeenSecAgo + ' s ago'}</td>
+      <td><button onclick="act('unlock',{lockId:'${l.id}'})">Force unlock</button></td></tr>`).join('');
+  document.getElementById('sessions').innerHTML = '<tr><th>Time</th><th>Lock</th><th>Amount</th><th>Status</th><th></th></tr>' +
+    d.sessions.map(s => `<tr><td>${new Date(s.createdAt).toLocaleTimeString()}</td><td>${s.lockId}</td><td>₹${s.amount}</td><td>${s.status}${s.payer ? ' (' + s.payer + ')' : ''}</td>
+      <td>${s.status === 'pending' ? `<button onclick="act('mark-paid',{sessionId:'${s.id}'})">Mark paid</button>` : ''}</td></tr>`).join('');
+}
+async function act(what, body) {
+  await fetch('/api/admin/' + what, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, key: key() }) });
+  load();
+}
+setInterval(() => { if (key()) load(); }, 3000);
+</script>
+</body>
+</html>

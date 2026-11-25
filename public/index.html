@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OnSmart – Pay to Unlock</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #f4f5f7; color: #1d2330; display: flex; min-height: 100vh; align-items: center; justify-content: center; padding: 20px; }
+  .card { background: #fff; width: 100%; max-width: 380px; border-radius: 16px; padding: 28px 24px; box-shadow: 0 4px 24px rgba(0,0,0,.07); text-align: center; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #6b7280; font-size: 14px; margin: 0 0 24px; }
+  input { width: 100%; font-size: 28px; letter-spacing: 8px; text-align: center; padding: 12px; border: 2px solid #d1d5db; border-radius: 10px; outline: none; }
+  input:focus { border-color: #2563eb; }
+  button, .btn { display: block; width: 100%; margin-top: 14px; padding: 14px; font-size: 17px; font-weight: 600; border: 0; border-radius: 10px; background: #2563eb; color: #fff; text-decoration: none; cursor: pointer; }
+  button:disabled { background: #9ca3af; }
+  .link { background: none; color: #2563eb; font-weight: 500; font-size: 15px; }
+  .amount { font-size: 40px; font-weight: 700; margin: 6px 0 2px; }
+  .note { font-size: 13px; color: #b45309; background: #fef3c7; border-radius: 8px; padding: 8px 10px; margin-top: 12px; }
+  .err { color: #b91c1c; font-size: 14px; margin-top: 12px; min-height: 18px; }
+  .status { margin-top: 18px; font-size: 15px; color: #374151; }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid #93c5fd; border-top-color: #2563eb; border-radius: 50%; animation: s 0.8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  .done { font-size: 56px; color: #16a34a; }
+  img { width: 200px; height: 200px; margin-top: 16px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <!-- Step 1: enter lock code -->
+  <div id="step1">
+    <h1>OnSmart Lock</h1>
+    <p class="sub">Enter the code printed on the lock</p>
+    <input id="code" inputmode="numeric" maxlength="8" placeholder="0000" autocomplete="off">
+    <button id="go">Continue</button>
+    <div class="err" id="err1"></div>
+  </div>
+
+  <!-- Step 2: pay -->
+  <div id="step2" class="hidden">
+    <p class="sub" style="margin-bottom:0">Lock <b id="lockLabel"></b> · Amount to pay</p>
+    <div class="amount">₹<span id="amt"></span></div>
+    <div class="note">Pay exactly this amount, including the paise. It's how we know the payment is for your lock.</div>
+    <a id="payBtn" class="btn" href="#">Pay with UPI app</a>
+    <img id="qr" alt="UPI QR code">
+    <p class="sub" style="margin:6px 0 0">Or scan this QR from another phone</p>
+    <div class="status" id="status"><span class="spin"></span>Waiting for payment…</div>
+    <button class="link" id="cancel">Use a different lock</button>
+  </div>
+
+  <!-- Step 3: unlocked -->
+  <div id="step3" class="hidden">
+    <div class="done">✓</div>
+    <h1 id="doneTitle">Unlocked</h1>
+    <p class="sub" id="doneSub">You can remove the clamp now. Thank you!</p>
+  </div>
+
+</div>
+<script>
+const $ = id => document.getElementById(id);
+let timer = null;
+
+function show(step) { ['step1','step2','step3'].forEach(s => $(s).classList.toggle('hidden', s !== step)); }
+
+// Pre-fill code from URL, e.g. site.com/?lock=5424 (handy for a QR sticker on the lock)
+const pre = new URLSearchParams(location.search).get('lock');
+if (pre) $('code').value = pre;
+
+$('go').onclick = async () => {
+  const lockId = $('code').value.trim();
+  $('err1').textContent = '';
+  if (!lockId) { $('err1').textContent = 'Please enter the lock code.'; return; }
+  $('go').disabled = true; $('go').textContent = 'Checking lock…';
+  try {
+    const r = await fetch('/api/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lockId }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Something went wrong');
+    $('lockLabel').textContent = d.lockId;
+    $('amt').textContent = d.amount;
+    $('payBtn').href = d.upiLink;
+    $('qr').src = d.qr;
+    show('step2');
+    poll(d.sessionId);
+  } catch (e) {
+    $('err1').textContent = e.message;
+  } finally {
+    $('go').disabled = false; $('go').textContent = 'Continue';
+  }
+};
+$('code').addEventListener('keydown', e => { if (e.key === 'Enter') $('go').click(); });
+
+function poll(id) {
+  clearInterval(timer);
+  timer = setInterval(async () => {
+    try {
+      const d = await (await fetch('/api/session/' + id)).json();
+      if (d.status === 'paid') $('status').innerHTML = '<span class="spin"></span>Payment received! Unlocking…';
+      else if (d.status === 'unlocked') { clearInterval(timer); show('step3'); }
+      else if (d.status === 'expired' || d.status === 'cancelled') {
+        clearInterval(timer);
+        $('status').textContent = 'This payment request expired. Please start again.';
+      }
+    } catch (e) { /* network blip, keep trying */ }
+  }, 2000);
+}
+
+$('cancel').onclick = () => { clearInterval(timer); show('step1'); };
+</script>
+</body>
+</html>
