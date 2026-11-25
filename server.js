@@ -15,16 +15,20 @@ const UPI_ID = process.env.UPI_ID || '8273658351@ptsbi';
 const PAYEE_NAME = process.env.PAYEE_NAME || 'OnSmart';
 const NOTIFY_SECRET = process.env.NOTIFY_SECRET || 'change-me-notify';
 const ADMIN_KEY = process.env.ADMIN_KEY || 'change-me-admin';
-// LOCKS format: "code:secret:baseAmount,code:secret:baseAmount"
-const LOCKS_ENV = process.env.LOCKS || '5424:lock5424secret:50';
+// LOCKS format: "code:price,code:price" with each lock's secret in env var LOCK_SECRET_<code>
+// (the older "code:secret:price" format also works)
+const LOCKS_ENV = process.env.LOCKS || '5424:50';
 const ONLINE_WINDOW_MS = 15 * 1000;   // lock counts as online if it polled in the last 15 s
 const SESSION_TTL_MS = 10 * 60 * 1000; // a payment session is valid for 10 minutes
 // -------------------------------------------------------------------------------
 
 const locks = {};
 for (const entry of LOCKS_ENV.split(',')) {
-  const [id, secret, base] = entry.trim().split(':');
-  if (id && secret) locks[id] = { id, secret, base: Number(base || 50), lastSeen: 0, pendingUnlock: null };
+  const parts = entry.trim().split(':');
+  const id = parts[0];
+  const secret = parts.length === 3 ? parts[1] : (process.env['LOCK_SECRET_' + id] || `lock${id}secret`);
+  const base = Number(parts[parts.length - 1]) || 50;
+  if (id) locks[id] = { id, secret, base, lastSeen: 0, pendingUnlock: null };
 }
 
 const sessions = {}; // sessionId -> { id, lockId, amount, status, createdAt, paidAt, payer }

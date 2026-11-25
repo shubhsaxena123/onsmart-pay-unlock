@@ -34,7 +34,8 @@ Open http://localhost:3000 . Admin page: http://localhost:3000/admin.html?key=ch
 |---|---|---|
 | `UPI_ID` | `yourname@paytm` | Where money goes (a Paytm for Business merchant UPI ID works best) |
 | `PAYEE_NAME` | `OnSmart` | Name shown in the UPI app |
-| `LOCKS` | `5424:Xk29s8dLq:50` | `code:secret:price`, comma-separated for more locks |
+| `LOCKS` | `5424:50` | `code:price`, comma-separated for more locks |
+| `LOCK_SECRET_5424` | (Generate) | Secret for lock 5424, copy it into the ESP32 code |
 | `NOTIFY_SECRET` | long random text | Password for the notification helper |
 | `ADMIN_KEY` | long random text | Password for the admin page |
 
