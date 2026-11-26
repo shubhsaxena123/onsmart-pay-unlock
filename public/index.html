@@ -40,9 +40,9 @@
 
   <!-- Step 2: pay -->
   <div id="step2" class="hidden">
-    <p class="sub" style="margin-bottom:0">Lock <b id="lockLabel"></b> · Amount to pay</p>
+    <p class="sub" style="margin-bottom:0">Lock <b id="lockLabel"></b> · Your challan is</p>
     <div class="amount">₹<span id="amt"></span></div>
-    <div class="note">Pay exactly this amount, including the paise. It's how we know the payment is for your lock.</div>
+    <div class="note" id="paiseNote">Pay exactly this amount, including the paise. It's how we know the payment is for your lock.</div>
     <a id="payBtn" class="btn" href="#">Pay with UPI app</a>
     <img id="qr" alt="UPI QR code">
     <p class="sub" style="margin:6px 0 0">Or scan this QR from another phone</p>
@@ -81,6 +81,7 @@ $('go').onclick = async () => {
     if (!r.ok) throw new Error(d.error || 'Something went wrong');
     $('lockLabel').textContent = d.lockId;
     $('amt').textContent = d.amount;
+    $('paiseNote').classList.toggle('hidden', !d.exactPaiseNeeded);
     $('payBtn').href = d.upiLink;
     $('qr').src = d.qr;
     currentSession = d.sessionId;

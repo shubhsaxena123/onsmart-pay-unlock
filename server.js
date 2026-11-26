@@ -48,6 +48,7 @@ function expireOld() {
 
 // Pick a unique amount like 50.13 that no other pending session is using
 function uniqueAmount(base) {
+  if (TRUST_PAID_BUTTON) return Number(base).toFixed(2); // prototype: exact challan amount
   const used = new Set(Object.values(sessions).filter(s => s.status === 'pending' || s.status === 'confirming').map(s => s.amount));
   const options = [];
   for (let p = 1; p <= 99; p++) {
@@ -59,7 +60,7 @@ function uniqueAmount(base) {
 }
 
 function upiLink(amount, lockId) {
-  const p = new URLSearchParams({ pa: UPI_ID, pn: PAYEE_NAME, am: amount, cu: 'INR', tn: `Lock ${lockId}` });
+  const p = new URLSearchParams({ pa: UPI_ID, pn: PAYEE_NAME, am: amount, cu: 'INR', tn: `Challan lock ${lockId}` });
   return `upi://pay?${p.toString()}`;
 }
 
@@ -100,7 +101,7 @@ app.post('/api/session', async (req, res) => {
   const link = upiLink(amount, lockId);
   const qr = await QRCode.toDataURL(link, { margin: 1, width: 260 });
   console.log(`NEW   lock=${lockId} amount=${amount} session=${id}`);
-  res.json({ sessionId: id, lockId, amount, upiLink: link, qr, expiresInSec: SESSION_TTL_MS / 1000 });
+  res.json({ sessionId: id, lockId, amount, upiLink: link, qr, exactPaiseNeeded: !TRUST_PAID_BUTTON, expiresInSec: SESSION_TTL_MS / 1000 });
 });
 
 // Website polls this to show progress
@@ -130,6 +131,8 @@ app.get('/api/lock/:id/poll', (req, res) => {
   const lock = locks[req.params.id];
   if (!lock || req.get('X-Lock-Key') !== lock.secret) return res.status(403).type('text').send('DENIED');
   lock.lastSeen = Date.now();
+  const fine = Number(req.query.fine);
+  if (Number.isFinite(fine) && fine > 0 && fine <= 100000) lock.base = fine; // challan set in ESP32 code
   if (req.query.state === 'locked') lock.locked = true;
   else if (req.query.state === 'unlocked') lock.locked = false;
   res.type('text').send(lock.pendingUnlock ? 'UNLOCK' : 'NONE');
